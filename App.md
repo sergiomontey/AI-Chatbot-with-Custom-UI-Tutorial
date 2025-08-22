@@ -189,9 +189,3 @@ export default App;
 
 ---
 
-## Tips for GitHub Readability
-
-- Use **collapsible** `<details>...</details>` blocks (as above) to chunk explanations.
-- Use **numbered callouts** `[1]`, `[2]` in code + a list under the block.
-- Keep **lines under ~100 chars** where possible to reduce horizontal scrolling.
-- Prefer **small sections** (Imports, State, Effects, Handler, JSX) over one giant code fence.
