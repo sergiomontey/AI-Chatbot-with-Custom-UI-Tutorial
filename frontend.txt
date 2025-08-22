@@ -1,0 +1,202 @@
+// This line imports the necessary tools from the React library.
+// We're bringing in React itself to build our components, and three special "hooks":
+// 1. `useState`: This hook helps us manage data that changes over time, like the messages in the chat.
+// 2. `useEffect`: This hook lets us perform actions after the component has rendered or when specific data changes, like scrolling to the bottom of the chat.
+// 3. `useRef`: This hook gives us a way to "hold on to" a reference to a specific element in our HTML, so we can interact with it directly, like finding the bottom of the chat window.
+import React, { useState, useEffect, useRef } from 'react';
+
+// This line imports the stylesheet for our component.
+// Why? To give our chat application a visual style, such as colors, fonts, and layout, we need to link our HTML to a CSS file.
+import './App.css'; 
+
+// This section defines a "contract" for what a chat message should look like.
+// Why? It ensures that every message object we create will have a `text` (a string of characters) and a `sender` (which can only be 'user' or 'bot'). This helps prevent errors and keeps our code organized.
+interface Message {
+  text: string;
+  sender: 'user' | 'bot';
+}
+
+// This is the main part of our application, a functional component named `App`.
+// All of our chat application's logic and user interface will be contained within this function.
+const App: React.FC = () => {
+  // `useState` creates a "state variable" for our list of messages.
+  // How? `messages` is the current list of messages, and `setMessages` is the function we use to update it.
+  // Why? When we use `setMessages`, React knows that it needs to redraw the part of the screen that displays the messages to show the new ones.
+  // The initial value is a single message from the bot.
+  const [messages, setMessages] = useState<Message[]>([
+    { text: "Hello! I am a simple chatbot. How can I help you today?", sender: 'bot' }
+  ]);
+  
+  // This state variable holds the text a user types into the input field.
+  // How? `input` is the current text, and `setInput` is the function to change it.
+  // Why? As the user types, we use `setInput` to keep the `input` state in sync with what's in the text box.
+  const [input, setInput] = useState<string>('');
+
+  // This state variable tracks whether the chatbot is currently generating a response.
+  // How? `isLoading` is a true/false value, and `setIsLoading` is used to toggle it.
+  // Why? We use this to show a "typing..." indicator and to disable the input field and send button so the user can't send a new message while a response is being generated.
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  // `useRef` creates a reference to an element in our user interface.
+  // How? We will attach this reference (`chatEndRef`) to an empty `div` at the bottom of our message area.
+  // Why? This gives us a direct way to find that specific point in the HTML and scroll to it.
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // `useEffect` runs an action when a state variable changes.
+  // How? The code inside this block will run every time the `messages` array is updated.
+  // Why? We want the chat window to automatically scroll down to the most recent message whenever a new message (either from the user or the bot) is added to the list. `scrollIntoView` is the function that makes this happen smoothly.
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
+  // This function is called when the user submits the form (by clicking "Send" or pressing Enter).
+  // It is marked as `async` because it needs to wait for a response from the server.
+  const handleSendMessage = async (e: React.FormEvent) => {
+    // This line prevents the default browser behavior of refreshing the page when the form is submitted.
+    // Why? We want to handle the form submission with our own code, not let the browser take over.
+    e.preventDefault();
+    
+    // This check stops the function if the user hasn't typed anything or if the app is already busy loading a response.
+    // Why? We don't want to send empty messages or multiple requests at the same time.
+    if (input.trim() === '' || isLoading) {
+      return;
+    }
+
+    // This creates a new message object for the user's input.
+    const userMessage: Message = { text: input, sender: 'user' };
+    
+    // This line updates the messages list by adding the user's new message to the end.
+    // How? We take the `prevMessages` (the old list) and create a new list with all the old messages (`...prevMessages`) plus the new `userMessage`.
+    // Why? This is the standard way to update an array in React state, as it creates a new array instead of changing the old one, which helps React detect that a change has occurred.
+    setMessages(prevMessages => [...prevMessages, userMessage]);
+    
+    // This clears the input field on the screen.
+    // Why? After a message is sent, we want the text box to be empty and ready for the next message.
+    setInput(''); 
+
+    // We set the `isLoading` state to `true` to show the "typing..." indicator and disable the send button.
+    setIsLoading(true); 
+
+    try {
+      // This is where we send the user's message to our Python backend server.
+      // We use `fetch` to make an HTTP `POST` request to the specified address.
+      // Why? The server needs to receive the message to process it and generate a response.
+      const response = await fetch('http://127.0.0.1:5001/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ message: input }),
+      });
+
+      // This checks if the server responded with an error (e.g., status code 404 or 500).
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      // This line waits for the server's response and converts the received data from JSON format into a JavaScript object.
+      // How? `response.json()` takes the raw data and parses it.
+      const data = await response.json();
+      
+      // We create a new message object for the bot's response using the data we got back from the server.
+      const botResponse: Message = { text: data.response, sender: 'bot' };
+
+      // Finally, we update the messages list again, this time adding the bot's new message.
+      setMessages(prevMessages => [...prevMessages, botResponse]);
+
+    } catch (error) {
+      // If there's any problem with the network request or server response, the code inside this block will run.
+      // Why? It's important to handle potential errors gracefully so the application doesn't crash.
+      console.error("Failed to fetch from backend:", error);
+      
+      // We create and display a new message to the user, letting them know that something went wrong.
+      const errorMessage: Message = { text: "Sorry, something went wrong. Please try again later.", sender: 'bot' };
+      setMessages(prevMessages => [...prevMessages, errorMessage]);
+
+    } finally {
+      // This block of code always runs, whether the request succeeded or failed.
+      // Why? We need to make sure `isLoading` is set back to `false` in all cases so the user can interact with the app again.
+      setIsLoading(false); 
+    }
+  };
+
+  // This is the `return` statement that defines the HTML structure (or JSX) of our component.
+  // It describes what the user will see on the screen.
+  return (
+    // This is the main container for our chat app. The `className` connects it to our CSS file for styling.
+    <div className="chatbot-container">
+      {/* This is the header section of our chat app. */}
+      <header className="chatbot-header">
+        {/* The main title of our app. */}
+        <h1>Simple Chatbot</h1>
+      </header>
+
+      {/* This is the area where all the messages will be displayed. */}
+      <div className="message-area">
+        {/* We use `.map()` to go through each message in our `messages` array. */}
+        {/* How? For each `msg` in the array, it creates a new `div` that represents that message. */}
+        {/* Why? This is how we dynamically display the entire chat history. */}
+        {messages.map((msg, index) => (
+          // A `div` to hold a single message.
+          // The `key` is a unique identifier React uses to keep track of each item in a list, which helps with performance.
+          // The `className` changes based on who sent the message (`user` or `bot`) so we can style them differently.
+          <div 
+            key={index} 
+            className={`message ${msg.sender === 'user' ? 'user-message' : 'bot-message'}`}
+          >
+            {/* The "bubble" that contains the message text. */}
+            <div className="message-bubble">
+              {/* The actual text of the message. */}
+              <p>{msg.text}</p>
+            </div>
+          </div>
+        ))}
+        {/* This is a conditional rendering block. It only shows the "typing..." indicator if `isLoading` is `true`. */}
+        {isLoading && (
+          <div className="typing-indicator">
+            {/* These are the dots that create the animated typing effect. */}
+            <div className="dot"></div>
+            <div className="dot"></div>
+            <div className="dot"></div>
+          </div>
+        )}
+        {/* This is the empty `div` that our `useRef` hook is attached to. */}
+        {/* How? It acts as an anchor point that we can scroll to. */}
+        {/* Why? It's placed at the very end of the `message-area` so when we scroll to it, the chat window shows the latest message. */}
+        <div ref={chatEndRef}></div>
+      </div>
+
+      {/* This is the form that contains our input field and send button. */}
+      {/* The `onSubmit` attribute tells the form to run the `handleSendMessage` function when it is submitted. */}
+      <form onSubmit={handleSendMessage} className="input-form">
+        {/* This is the text input field where the user types their message. */}
+        {/* `value={input}` makes the input field's content match our `input` state. */}
+        {/* `onChange` updates the `input` state every time the user types. */}
+        {/* `disabled={isLoading}` prevents the user from typing if a response is being generated. */}
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type a message..."
+          disabled={isLoading}
+          className="input-field"
+        />
+        {/* This is the button that submits the form and sends the message. */}
+        {/* The button is also disabled when `isLoading` is true. */}
+        {/* Its text changes from "Send" to "Sending..." to provide feedback to the user. */}
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="send-button"
+        >
+          {isLoading ? 'Sending...' : 'Send'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// This line exports our `App` component so that it can be used in other files (like `index.js`), making it the main component of our application.
+export default App;
